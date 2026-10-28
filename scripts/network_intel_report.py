@@ -230,14 +230,25 @@ def demo_rows(days_back):
                    "pixel.adnetwork.example", "metrics.video-app.example", "doubleclick.example"]
     allowed_dom = ["www.example.com", "video.streaming.example", "push.vendor.example",
                    "api.weather.example", "cdn.static.example", "mail.example.org", "time.example.net"]
+    # Relative traffic by hour of day: quiet at night, busy in the evening.
+    hour_weight = [0.15, 0.10, 0.08, 0.08, 0.10, 0.15, 0.30, 0.50, 0.60, 0.55, 0.50, 0.55,
+                   0.60, 0.55, 0.50, 0.55, 0.65, 0.80, 0.95, 1.00, 0.95, 0.80, 0.50, 0.30]
+    blocked_w = [30, 24, 18, 14, 9, 5]       # uneven, so the top lists look natural
+    allowed_w = [30, 22, 18, 12, 9, 6, 3]
+
     rows = []
-    for _ in range(20000):
+    while len(rows) < 20000:
+        ts = now - rng.randint(0, days_back * 86400)
+        if rng.random() > hour_weight[datetime.fromtimestamp(ts, tz=timezone.utc).hour]:
+            continue  # rejection sampling gives the daily rhythm
         ip, _w, block_rate = rng.choices(clients, weights=[c[1] for c in clients])[0]
         is_blocked = rng.random() < block_rate
+        domain = (rng.choices(blocked_dom, weights=blocked_w)[0] if is_blocked
+                  else rng.choices(allowed_dom, weights=allowed_w)[0])
         rows.append({
-            "timestamp": now - rng.randint(0, days_back * 86400),
+            "timestamp": ts,
             "status": 1 if is_blocked else rng.choice([2, 3]),
-            "domain": rng.choice(blocked_dom if is_blocked else allowed_dom),
+            "domain": domain,
             "client": ip,
         })
     return rows

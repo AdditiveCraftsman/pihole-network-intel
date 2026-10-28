@@ -4,6 +4,10 @@ A weekly, emailed report on what your network is doing, built from Pi-hole's own
 
 Pi-hole's dashboard shows you the last few hours. This shows you the week: which devices are chatty, which ones are quietly bypassing your DNS, and which ones stopped talking to Pi-hole entirely.
 
+![Sample weekly report, generated from fake demo data](docs/screenshots/sample-report.png)
+
+*Sample report built from fake demo data (`--demo`), so no real devices or domains appear.*
+
 ## What's in the report
 
 - **Summary:** total queries, blocked, block rate
@@ -15,7 +19,7 @@ Pi-hole's dashboard shows you the last few hours. This shows you the week: which
 - **Top blocked / top allowed domains**
 - A plain-text copy saved to disk and attached as the text part of the email
 
-Try it without touching your network: `python3 scripts/network_intel_report.py --demo` writes `demo-report.html` filled with fake data.
+Try it without touching your network: `python3 scripts/network_intel_report.py --demo` writes `demo-report.html` filled with fake data (that's how the screenshot above was made).
 
 ## Requirements
 
