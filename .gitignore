@@ -1,0 +1,14 @@
+# Real configuration and secrets: never commit
+config/config.py
+.env
+*.env
+
+# Generated output
+reports/
+logs/
+*.log
+demo-report.html
+
+# Python
+__pycache__/
+*.pyc
