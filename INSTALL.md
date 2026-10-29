@@ -41,7 +41,7 @@ Set at least:
 |---|---|
 | `PIHOLE_IP` | Your Pi-hole's IP address |
 | `TIMEZONE` | IANA timezone, e.g. `America/Puerto_Rico`. Controls how days and hours are bucketed |
-| `GMAIL_FROM`, `GMAIL_TO` | Sender and recipient (can be the same address) |
+| `GMAIL_FROM`, `GMAIL_TO` | Sender and recipient (can be the same address). `GMAIL_TO` can list several recipients separated by commas, e.g. `"a@gmail.com, b@gmail.com"` |
 | `GMAIL_APP_PASSWORD` | Gmail app password (see below), or leave empty and use the environment variable |
 | `DEVICE_NAMES` | Optional friendly names by IP |
 | `EXPECTED_DEVICES` | Optional list of devices that should show up every week |

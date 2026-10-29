@@ -15,7 +15,7 @@ TIMEZONE = "America/New_York"           # IANA name; controls day/hour buckets
 # Needs a Gmail *app password* (requires 2-step verification):
 #   https://myaccount.google.com/apppasswords
 GMAIL_FROM = "you@gmail.com"
-GMAIL_TO = "you@gmail.com"
+GMAIL_TO = "you@gmail.com"             # several recipients: "a@gmail.com, b@gmail.com"
 GMAIL_APP_PASSWORD = ""                 # or leave empty and set NETINTEL_GMAIL_PASSWORD
 
 # ── Device names ─────────────────────────────────────────────────────────────

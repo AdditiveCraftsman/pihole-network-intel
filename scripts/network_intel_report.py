@@ -468,14 +468,19 @@ def send_email(cfg, html_body, text_body, subject):
         if not cfg[key]:
             sys.exit(f"ERROR: {key} is not set (config/config.py or NETINTEL_GMAIL_PASSWORD).")
 
+    # GMAIL_TO may hold one address or several, separated by commas or semicolons.
+    recipients = [a.strip() for a in cfg["GMAIL_TO"].replace(";", ",").split(",") if a.strip()]
+    if not recipients:
+        sys.exit("ERROR: GMAIL_TO has no valid address.")
+
     msg = MIMEMultipart("alternative")
-    msg["Subject"], msg["From"], msg["To"] = subject, cfg["GMAIL_FROM"], cfg["GMAIL_TO"]
+    msg["Subject"], msg["From"], msg["To"] = subject, cfg["GMAIL_FROM"], ", ".join(recipients)
     msg.attach(MIMEText(text_body, "plain", "utf-8"))
     msg.attach(MIMEText(html_body, "html", "utf-8"))  # last part is preferred by clients
 
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
         server.login(cfg["GMAIL_FROM"], cfg["GMAIL_APP_PASSWORD"])
-        server.sendmail(cfg["GMAIL_FROM"], cfg["GMAIL_TO"], msg.as_string())
+        server.sendmail(cfg["GMAIL_FROM"], recipients, msg.as_string())
 
 
 # ── MAIN ──────────────────────────────────────────────────────────────────────
