@@ -11,6 +11,7 @@ Pi-hole's dashboard shows you the last few hours. This shows you the week: which
 ## What's in the report
 
 - **Summary:** total queries, blocked, block rate
+- **Blocklist problem warning:** shown at the top (and in the email subject) when a blocklist fails to download, holds 0 domains, or the total number of blocked domains drops sharply
 - **Daily traffic:** per-day volume and block rate, in your own timezone
 - **Hourly activity:** 24-hour heat strip showing when the network is busy
 - **Device breakdown:** queries and block rate per device, using friendly names from your config or the hostnames Pi-hole already learned
@@ -43,6 +44,16 @@ Full setup, permissions and the cron job are in [INSTALL.md](INSTALL.md).
 ## How it counts
 
 Blocked vs. allowed uses the status codes from the [Pi-hole query database docs](https://docs.pi-hole.net/database/query-database/): statuses 1, 4–11, 15, 16 and 18 count as blocked; 2, 3, 12–14 and 17 count as allowed. Block rates depend heavily on your blocklists and devices. A network full of smart TVs typically lands far lower than the percentages blocklist marketing quotes.
+
+## Blocklist health
+
+Pi-hole keeps running when a blocklist fails to download: it quietly uses an old copy, or none, and blocking gets weaker with no visible error. The report reads `gravity.db` (read-only) and warns about:
+
+- enabled lists whose last download failed (`adlist.status` 3 = old copy used, 4 = no copy at all, per the [Pi-hole docs](https://docs.pi-hole.net/database/domain-database/))
+- enabled lists holding 0 domains
+- a fall of more than `BLOCKLIST_DROP_PCT` (default 20%) in the total blocked domains compared with the last good run
+
+The last good count is kept in `reports/blocklist-health.json` and only moves up on a healthy run, so a drop keeps warning every week until it recovers. If you removed lists on purpose, accept the new count with `python3 scripts/blocklist_health.py reset`. A healthy run shows one quiet "Blocklists OK" line.
 
 ## Uncovered domains
 

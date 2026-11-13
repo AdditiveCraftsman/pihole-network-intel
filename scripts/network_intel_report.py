@@ -37,6 +37,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 BASE_DIR = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 
+import blocklist_health  # noqa: E402  (same folder)
 import uncovered_domains  # noqa: E402  (same folder)
 
 # ── PI-HOLE QUERY STATUS CODES ────────────────────────────────────────────────
@@ -63,6 +64,9 @@ DEFAULTS = {
     "EXPECTED_DEVICES": [],
     "BYPASS_MIN_QUERIES": 500,
     "BYPASS_MAX_BLOCK_PCT": 5.0,
+    "BLOCKLIST_HEALTH_ENABLED": True,
+    "BLOCKLIST_DROP_PCT": 20,
+    "GRAVITY_DB_PATH": None,
     "UNCOVERED_ENABLED": True,
     "UNCOVERED_TOP_N": 8,
     "UNCOVERED_MIN_QUERIES": 10,
@@ -127,6 +131,15 @@ def get_tz(name):
         except Exception:
             pass
     return datetime.now().astimezone().tzinfo
+
+
+def gravity_path_for(cfg):
+    """gravity.db lives next to the FTL database unless GRAVITY_DB_PATH says otherwise."""
+    return cfg["GRAVITY_DB_PATH"] or os.path.join(os.path.dirname(cfg["DB_PATH"]), "gravity.db")
+
+
+def health_state_path(cfg):
+    return os.path.join(cfg["REPORT_DIR"], "blocklist-health.json")
 
 
 # ── DATA LAYER ────────────────────────────────────────────────────────────────
@@ -362,6 +375,7 @@ def make_html(stats, cfg, tz, start_ts, end_ts):
             f'Check that their DNS still points at Pi-hole.</div></td></tr>'
         )
 
+    health_html = blocklist_health.render_html(stats.get("health"), SECTION)
     uncovered_html = uncovered_domains.render_html(stats.get("uncovered"), tz, SECTION, TH)
 
     return f"""<!DOCTYPE html>
@@ -387,6 +401,8 @@ def make_html(stats, cfg, tz, start_ts, end_ts):
     <div style="font-family:'Courier New',monospace;color:#ccfffa;font-size:10px;letter-spacing:2px;text-transform:uppercase">Block Rate</div>
     <div style="color:#ffffff;font-size:28px;font-weight:bold;margin-top:6px">{stats["block_pct"]}%</div></div></td>
 </tr></table></td></tr>
+
+{health_html}
 
 <tr><td style="padding:24px 32px 0">
   <div style="{SECTION.format(c="#e63946")}">── Daily Traffic ({escape(str(cfg["TIMEZONE"]))})</div>
@@ -455,9 +471,9 @@ def make_text(stats, cfg, tz, start_ts, end_ts):
         f"  Blocked       : {stats['blocked']:,}",
         f"  Allowed       : {stats['allowed']:,}",
         f"  Block rate    : {stats['block_pct']}%",
-        "",
-        "DAILY",
     ]
+    lines += blocklist_health.render_text(stats.get("health"))
+    lines += ["", "DAILY"]
     for day, d in stats["day_counts"].items():
         pct = round(d["blocked"] / d["total"] * 100, 1) if d["total"] else 0.0
         lines.append(f"  {day:%a %b %d}  {d['total']:7,} queries  {pct:5.1f}% blocked")
@@ -531,6 +547,13 @@ def main():
         return 0
 
     stats = analyse(rows, hostnames, cfg, tz)
+    stats["health"] = None
+    if cfg["BLOCKLIST_HEALTH_ENABLED"] and not args.demo:
+        try:  # best effort: a problem here must never stop the weekly email
+            stats["health"] = blocklist_health.check(
+                gravity_path_for(cfg), health_state_path(cfg), float(cfg["BLOCKLIST_DROP_PCT"]))
+        except Exception as exc:  # noqa: BLE001
+            print(f"  WARNING: blocklist health check skipped: {exc}", file=sys.stderr)
     stats["uncovered"], uncovered_files = None, None
     if cfg["UNCOVERED_ENABLED"]:
         # Never let this optional section stop the weekly email.
@@ -563,7 +586,8 @@ def main():
     if args.no_email:
         print("  --no-email set: skipping email.")
     else:
-        subject = (f"Pi-hole Report — {stats['block_pct']}% blocked "
+        warn = "⚠ Blocklist problem · " if stats["health"] and stats["health"]["issues"] else ""
+        subject = (f"{warn}Pi-hole Report — {stats['block_pct']}% blocked "
                    f"({stats['total']:,} queries, {cfg['DAYS_BACK']}-day window)")
         print(f"  Sending email to {cfg['GMAIL_TO']}...")
         send_email(cfg, html, text, subject)

@@ -66,3 +66,10 @@ NEEDED_DOMAINS = [
     # "my-printer-cloud.example.com",
 ]
 # UNCOVERED_DIR = "/home/pi/network-intel/reports/uncovered"   # default: <REPORT_DIR>/uncovered
+
+# ── Blocklist health ─────────────────────────────────────────────────────────
+# Warns (top of the email, and in the subject line) when a blocklist fails to download,
+# holds 0 domains, or the total number of blocked domains drops sharply.
+BLOCKLIST_HEALTH_ENABLED = True
+BLOCKLIST_DROP_PCT = 20                 # warn when the total falls this much below the last good count
+# GRAVITY_DB_PATH = "/etc/pihole/gravity.db"   # default: next to DB_PATH
