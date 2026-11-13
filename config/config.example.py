@@ -41,3 +41,21 @@ EXPECTED_DEVICES = [
 BYPASS_MIN_QUERIES = 500
 # ...and fewer than this percentage get blocked.
 BYPASS_MAX_BLOCK_PCT = 5.0
+
+# ── Uncovered domains (weekly review section) ────────────────────────────────
+# Lists, per device, domains Pi-hole ALLOWED that look like telemetry (regular "phone
+# home" beat, telemetry-style names, third-party to the device's brand). Nothing is ever
+# blocked automatically: you review candidates.txt, test, then add what you approve to
+# your own custom blocklist.
+UNCOVERED_ENABLED = True
+UNCOVERED_TOP_N = 8                     # rows per device in the email (all rows go to the CSV)
+UNCOVERED_MIN_QUERIES = 10              # ignore domains queried fewer times than this per week
+UNCOVERED_BLOCK_SCORE = 55              # score needed (plus a name hint, or a third-party/new beacon) for "candidate-block"
+UNCOVERED_INVESTIGATE_SCORE = 30        # score needed (plus a name hint or beacon) for "investigate"
+# Domains your devices need, never suggested for blocking. Suffix match: "example.com"
+# also covers "api.example.com". The built-in list already covers connectivity checks,
+# LG webOS update servers, Netflix core hosts and time sync.
+NEEDED_DOMAINS = [
+    # "my-printer-cloud.example.com",
+]
+# UNCOVERED_DIR = "/home/pi/network-intel/reports/uncovered"   # default: <REPORT_DIR>/uncovered

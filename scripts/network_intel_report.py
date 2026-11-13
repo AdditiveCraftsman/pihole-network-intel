@@ -4,7 +4,8 @@ Pi-hole Network Intelligence Report
 
 Reads the Pi-hole v6 FTL database, builds an HTML + plain-text weekly report
 (daily trend, hourly activity, per-device breakdown, top blocked/allowed
-domains, DNS-bypass hints, silent devices) and emails it via Gmail SMTP.
+domains, DNS-bypass hints, silent devices, uncovered domains) and emails it via
+Gmail SMTP.
 
 Usage:
     python3 network_intel_report.py              # build, save text copy, email
@@ -34,6 +35,9 @@ except ImportError:  # Python < 3.9
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BASE_DIR = os.path.dirname(HERE)
+sys.path.insert(0, HERE)
+
+import uncovered_domains  # noqa: E402  (same folder)
 
 # ── PI-HOLE QUERY STATUS CODES ────────────────────────────────────────────────
 # Source: https://docs.pi-hole.net/database/query-database/
@@ -59,6 +63,13 @@ DEFAULTS = {
     "EXPECTED_DEVICES": [],
     "BYPASS_MIN_QUERIES": 500,
     "BYPASS_MAX_BLOCK_PCT": 5.0,
+    "UNCOVERED_ENABLED": True,
+    "UNCOVERED_TOP_N": 8,
+    "UNCOVERED_MIN_QUERIES": 10,
+    "UNCOVERED_BLOCK_SCORE": 55,
+    "UNCOVERED_INVESTIGATE_SCORE": 30,
+    "NEEDED_DOMAINS": [],
+    "UNCOVERED_DIR": None,
 }
 
 
@@ -104,6 +115,7 @@ def demo_config():
             "192.168.1.50": "Smart Speaker",
         },
         "EXPECTED_DEVICES": ["Bob's Laptop", "Garage Camera"],
+        "_DEMO": True,
     })
     return cfg
 
@@ -251,6 +263,12 @@ def demo_rows(days_back):
             "domain": domain,
             "client": ip,
         })
+    # A few periodic "phone home" hosts so the uncovered-domains section has something to show.
+    for ip, domain, every in (("192.168.1.20", "metrics.tv-vendor.example", 900),
+                              ("192.168.1.20", "api.tv-vendor.example", 1800),
+                              ("192.168.1.21", "events.ads-sdk.example", 600)):
+        for t in range(now - days_back * 86400, now, every):
+            rows.append({"timestamp": t + rng.randint(-20, 20), "status": 2, "domain": domain, "client": ip})
     return rows
 
 
@@ -344,6 +362,8 @@ def make_html(stats, cfg, tz, start_ts, end_ts):
             f'Check that their DNS still points at Pi-hole.</div></td></tr>'
         )
 
+    uncovered_html = uncovered_domains.render_html(stats.get("uncovered"), tz, SECTION, TH)
+
     return f"""<!DOCTYPE html>
 <html><head><meta charset="UTF-8"></head>
 <body style="margin:0;padding:0;background:#f0f2f5;font-family:'Courier New',Courier,monospace">
@@ -391,6 +411,8 @@ def make_html(stats, cfg, tz, start_ts, end_ts):
 </td></tr>
 
 {silent_html}
+
+{uncovered_html}
 
 <tr><td style="padding:24px 32px 0">
   <div style="{SECTION.format(c="#e63946")}">── Top Blocked Domains (attempted)</div>
@@ -445,6 +467,8 @@ def make_text(stats, cfg, tz, start_ts, end_ts):
         lines.append(f"  {name:<24} {ip:<16} {total:7,} queries  {pct:5.1f}% blocked{'  <-- possible bypass' if bypass else ''}")
     if stats["silent"]:
         lines += ["", "SILENT DEVICES (no queries this period)"] + [f"  {n}" for n in stats["silent"]]
+
+    lines += uncovered_domains.render_text(stats.get("uncovered"))
 
     lines += ["", "TOP BLOCKED DOMAINS"]
     lines += [f"  {i:2}. {c:6,}  {d}" for i, (d, c) in enumerate(stats["top_blocked"], 1)]
@@ -507,6 +531,18 @@ def main():
         return 0
 
     stats = analyse(rows, hostnames, cfg, tz)
+    stats["uncovered"], uncovered_files = None, None
+    if cfg["UNCOVERED_ENABLED"]:
+        # Never let this optional section stop the weekly email.
+        try:
+            out_dir = cfg["UNCOVERED_DIR"] or os.path.join(cfg["REPORT_DIR"], "uncovered")
+            reviewed = uncovered_domains.load_reviewed(os.path.join(out_dir, "reviewed.json"))
+            stats["uncovered"] = uncovered_domains.build(
+                rows, cfg, start_ts, BLOCKED_STATUSES, ALLOWED_STATUSES, reviewed)
+            if not args.demo:
+                uncovered_files = uncovered_domains.write_outputs(stats["uncovered"], out_dir, tz)
+        except Exception as exc:  # noqa: BLE001
+            print(f"  WARNING: uncovered-domains section skipped: {exc}", file=sys.stderr)
     html = make_html(stats, cfg, tz, start_ts, end_ts)
     text = make_text(stats, cfg, tz, start_ts, end_ts)
 
@@ -521,6 +557,8 @@ def main():
         return 0
 
     print(f"  Text report saved: {save_text(cfg['REPORT_DIR'], text, tz)}")
+    if uncovered_files:
+        print(f"  Uncovered domains saved: {uncovered_files[0]} , {uncovered_files[1]}")
 
     if args.no_email:
         print("  --no-email set: skipping email.")
