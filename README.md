@@ -54,7 +54,7 @@ Each row gets a score from volume, share of the device's traffic, beaconing (que
 - **investigate**: a regular beat or telemetry-style name, but not enough to propose blocking (first-party beacons stay here so OS-critical hosts are not proposed)
 - **keep**: everything else (CSV only)
 
-Volume, "third-party" or "new" alone never flags a domain. Domains on the built-in needed list (connectivity checks, OS update servers, Netflix core, time sync; extend it with `NEEDED_DOMAINS`) are never suggested.
+Volume, "third-party" or "new" alone never flags a domain. General-purpose machines (laptops, phones) are noisy here because web apps poll on a timer, so list them in `UNCOVERED_SKIP` and keep the section focused on appliances. Domains on the built-in needed list (connectivity checks, OS update servers, Netflix core, time sync; extend it with `NEEDED_DOMAINS`) are never suggested.
 
 Files written to `reports/uncovered/` (git-ignored, because they contain your device names):
 

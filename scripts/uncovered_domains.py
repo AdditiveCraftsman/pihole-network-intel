@@ -48,7 +48,8 @@ DEFAULT_NEEDED = [
     "www.netflix.com", "api-global.netflix.com", "secure.netflix.com",
     "nflxvideo.net", "nflximg.net", "nflximg.com", "nflxext.com", "nflxso.net",
     # time sync
-    "pool.ntp.org", "time.android.com", "time.windows.com", "time.cloudflare.com",
+    "ntp.org", "ntp.ubuntu.com", "time.nist.gov", "time.google.com", "time.apple.com",
+    "time.android.com", "time.windows.com", "time.cloudflare.com",
 ]
 
 # Local / reverse-lookup noise: kept in the CSV, never reported.
@@ -255,6 +256,9 @@ def build(rows, cfg, start_ts, blocked_statuses, allowed_statuses, reviewed=None
     thr_invest = int(cfg.get("UNCOVERED_INVESTIGATE_SCORE", 30))
     needed = DEFAULT_NEEDED + [d.lower().rstrip(".") for d in cfg.get("NEEDED_DOMAINS", [])]
     reviewed = reviewed or {}
+    # Devices to leave out entirely (general-purpose machines whose app traffic looks like
+    # beaconing): match by friendly name, hostname, IP or MAC, case-insensitive.
+    skip = {str(x).strip().lower() for x in cfg.get("UNCOVERED_SKIP", []) if str(x).strip()}
     ignore = set(cfg.get("IGNORE_CLIENTS", [])) | ({cfg["PIHOLE_IP"]} if cfg.get("PIHOLE_IP") else set())
     db_path = cfg.get("DB_PATH") if not cfg.get("_DEMO") else None
 
@@ -288,6 +292,10 @@ def build(rows, cfg, start_ts, blocked_statuses, allowed_statuses, reviewed=None
             continue
         dev = ip_map.get(ip)
         key = dev["key"] if dev else ip
+        if skip:
+            label = (dev["name"] if dev else friendly.get(ip, ip)).lower()
+            if skip & {ip.lower(), key.lower(), label}:
+                continue
         d = devices.get(key)
         if d is None:
             d = devices[key] = {

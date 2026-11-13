@@ -203,6 +203,19 @@ class UncoveredDomainsTest(unittest.TestCase):
         self.assertIn("www.ueiwsp.com", res["approved_pending"])
         self.assertNotIn("www.ueiwsp.com", res["candidates"])
 
+    def test_skip_list_excludes_devices(self):
+        for token in ("laptop", "10.0.0.50", "LG TV Living Room", TV_MAC):   # name, IP, name, MAC
+            res = ud.build(self.rows, dict(self.cfg, UNCOVERED_SKIP=[token]), self.start, BLOCKED, ALLOWED)
+            skipped = {"laptop": "Laptop", "10.0.0.50": "Laptop",
+                       "LG TV Living Room": "LG TV Living Room", TV_MAC: "LG TV Living Room"}[token]
+            self.assertNotIn(skipped, {f["device"] for f in res["all"]}, token)
+        res = ud.build(self.rows, dict(self.cfg, UNCOVERED_SKIP=["laptop"]), self.start, BLOCKED, ALLOWED)
+        self.assertIn("LG TV Living Room", {f["device"] for f in res["all"]})   # others untouched
+
+    def test_time_servers_are_needed(self):
+        for d in ("time.nist.gov", "0.pool.ntp.org", "time.google.com"):
+            self.assertTrue(ud._suffix_match(d, ud.DEFAULT_NEEDED), d)
+
     def test_needed_domains_config_extends_list(self):
         cfg = dict(self.cfg, NEEDED_DOMAINS=["ueiwsp.com"])
         res = ud.build(self.rows, cfg, self.start, BLOCKED, ALLOWED)

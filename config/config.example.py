@@ -52,6 +52,13 @@ UNCOVERED_TOP_N = 8                     # rows per device in the email (all rows
 UNCOVERED_MIN_QUERIES = 10              # ignore domains queried fewer times than this per week
 UNCOVERED_BLOCK_SCORE = 55              # score needed (plus a name hint, or a third-party/new beacon) for "candidate-block"
 UNCOVERED_INVESTIGATE_SCORE = 30        # score needed (plus a name hint or beacon) for "investigate"
+# Devices to leave out of this section. Best for laptops and phones, whose web apps poll
+# on a timer and look like beaconing; the section is most useful for TVs, cameras and
+# other appliances. Match by friendly name, hostname, IP or MAC, case-insensitive.
+UNCOVERED_SKIP = [
+    # "Alice's Phone",
+    # "192.168.1.31",
+]
 # Domains your devices need, never suggested for blocking. Suffix match: "example.com"
 # also covers "api.example.com". The built-in list already covers connectivity checks,
 # LG webOS update servers, Netflix core hosts and time sync.
