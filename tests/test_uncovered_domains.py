@@ -165,8 +165,42 @@ class UncoveredDomainsTest(unittest.TestCase):
         self.assertNotIn("discovery.meethue.com", self.by_domain)   # only blocked queries
         self.assertNotIn("ichnaea.netflix.com", self.by_domain)
 
-    def test_busy_but_irregular_domain_is_not_flagged(self):
-        self.assertEqual(self.action("www.google.com"), "keep")
+    def test_busy_but_irregular_domain_is_review_only(self):
+        # Busy, but no beat and no telemetry name: listed for a look, never a block candidate.
+        self.assertEqual(self.action("www.google.com"), "review")
+        self.assertNotIn("www.google.com", self.result["candidates"])
+
+    def test_review_tier_lists_busiest_unflagged_domains_with_cap(self):
+        tv = next(d for d in self.result["devices"] if d["name"] == "LG TV Living Room")
+        review = [f for f in tv["findings"] if f["action"] == "review"]
+        self.assertLessEqual(len(review), 5)                                   # default cap
+        self.assertEqual([f["allowed"] for f in review], sorted((f["allowed"] for f in review), reverse=True))
+        self.assertIn("volume", ud._tags(review[0]))
+        # review rows come after flagged rows
+        acts = [f["action"] for f in tv["findings"]]
+        self.assertEqual(acts, sorted(acts, key=lambda a: a == "review"))
+
+    def test_review_tier_can_be_turned_off_and_tuned(self):
+        off = ud.build(self.rows, dict(self.cfg, UNCOVERED_REVIEW_TOP_N=0), self.start, BLOCKED, ALLOWED)
+        self.assertNotIn("review", {f["action"] for f in off["all"]})
+        one = ud.build(self.rows, dict(self.cfg, UNCOVERED_REVIEW_TOP_N=1), self.start, BLOCKED, ALLOWED)
+        tv = next(d for d in one["devices"] if d["name"] == "LG TV Living Room")
+        self.assertEqual(sum(f["action"] == "review" for f in tv["findings"]), 1)
+        high = ud.build(self.rows, dict(self.cfg, UNCOVERED_REVIEW_MIN_QUERIES=10**6), self.start, BLOCKED, ALLOWED)
+        self.assertNotIn("review", {f["action"] for f in high["all"]})
+
+    def test_review_rows_stop_after_keep_decision(self):
+        reviewed = {"google.com": {"decision": "keep", "date": "2026-11-17", "note": ""}}
+        res = ud.build(self.rows, self.cfg, self.start, BLOCKED, ALLOWED, reviewed)
+        acts = {f["domain"]: f["action"] for f in res["all"]}
+        self.assertEqual(acts["www.google.com"], "reviewed-keep")
+
+    def test_review_rows_render_in_html_and_text(self):
+        text = "\n".join(ud.render_text(self.result))
+        self.assertIn("www.google.com", text)
+        self.assertIn("review", text)
+        html = ud.render_html(self.result, None, "color:{c}", "x")
+        self.assertIn("#6b7a99", html)
 
     def test_candidates_file_content(self):
         self.assertIn("www.ueiwsp.com", self.result["candidates"])

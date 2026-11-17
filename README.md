@@ -63,9 +63,10 @@ Each row gets a score from volume, share of the device's traffic, beaconing (que
 
 - **candidate-block**: a telemetry-style name, or a regular beat that is also third-party or new
 - **investigate**: a regular beat or telemetry-style name, but not enough to propose blocking (first-party beacons stay here so OS-critical hosts are not proposed)
+- **review**: a device's busiest allowed domains that no signal flagged (up to `UNCOVERED_REVIEW_TOP_N`, default 5). Bursty devices such as TVs have no regular beat, so their main phone-home hosts would otherwise never show. Look-at-it rows only: never a block candidate, and a `keep` decision (below) removes one for good
 - **keep**: everything else (CSV only)
 
-Volume, "third-party" or "new" alone never flags a domain. General-purpose machines (laptops, phones) are noisy here because web apps poll on a timer, so list them in `UNCOVERED_SKIP` and keep the section focused on appliances. Domains on the built-in needed list (connectivity checks, OS update servers, Netflix core, time sync; extend it with `NEEDED_DOMAINS`) are never suggested.
+Volume, "third-party" or "new" alone never flags a domain as `candidate-block` or `investigate`. General-purpose machines (laptops, phones) are noisy here because web apps poll on a timer, so list them in `UNCOVERED_SKIP` and keep the section focused on appliances. Domains on the built-in needed list (connectivity checks, OS update servers, Netflix core, time sync; extend it with `NEEDED_DOMAINS`) are never suggested.
 
 Files written to `reports/uncovered/` (git-ignored, because they contain your device names):
 
@@ -85,6 +86,10 @@ python3 scripts/uncovered_domains.py review tracker.example.com block
 or apply a block: append the domain to your custom blocklist and rebuild gravity (`sudo pihole -g`). To roll back, remove the line and rebuild. Pi-hole plain-domain lists match **exact hostnames only**, so list each hostname you want blocked. Reviewed `keep` and `block` decisions also cover subdomains of the domain you recorded.
 
 Limitations: scoring is a heuristic tuned on one smart-TV network, not a verdict. "Family" grouping uses a small built-in list of multi-part suffixes, and novelty only looks back as far as Pi-hole's database retention (91 days by default).
+
+## Email delivery
+
+The send is retried up to 3 times (20 seconds apart) for temporary failures. If it still fails, the script exits with a plain-language reason and the report is still saved to disk. A login that Gmail *rejects* is not retried. If Gmail closes the connection while logging in, the most likely cause is a revoked app password (Google revokes them when the account password changes): create a new one at <https://myaccount.google.com/apppasswords> and update `GMAIL_APP_PASSWORD` in `config/config.py`.
 
 ## Tests
 

@@ -22,6 +22,7 @@ import random
 import smtplib
 import sqlite3
 import sys
+import time
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from email.mime.multipart import MIMEMultipart
@@ -503,7 +504,8 @@ def save_text(report_dir, text, tz):
     return path
 
 
-def send_email(cfg, html_body, text_body, subject):
+def send_email(cfg, html_body, text_body, subject, attempts=3, delay=20, _sleep=time.sleep):
+    """Send the report, retrying transient failures; exit with a plain-language reason if it cannot."""
     for key in ("GMAIL_FROM", "GMAIL_TO", "GMAIL_APP_PASSWORD"):
         if not cfg[key]:
             sys.exit(f"ERROR: {key} is not set (config/config.py or NETINTEL_GMAIL_PASSWORD).")
@@ -518,9 +520,34 @@ def send_email(cfg, html_body, text_body, subject):
     msg.attach(MIMEText(text_body, "plain", "utf-8"))
     msg.attach(MIMEText(html_body, "html", "utf-8"))  # last part is preferred by clients
 
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-        server.login(cfg["GMAIL_FROM"], cfg["GMAIL_APP_PASSWORD"])
-        server.sendmail(cfg["GMAIL_FROM"], recipients, msg.as_string())
+    revoked_hint = (
+        "Gmail closed the connection while logging in. This usually means the app password was "
+        "revoked (Google does that when the account password changes). Create a new one at "
+        "https://myaccount.google.com/apppasswords and update GMAIL_APP_PASSWORD in config/config.py."
+    )
+    last_exc, stage = None, "connect"
+    for attempt in range(1, attempts + 1):
+        try:
+            stage = "connect"
+            with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=30) as server:
+                stage = "login"
+                server.login(cfg["GMAIL_FROM"], cfg["GMAIL_APP_PASSWORD"])
+                stage = "send"
+                server.sendmail(cfg["GMAIL_FROM"], recipients, msg.as_string())
+            return
+        except smtplib.SMTPAuthenticationError as exc:
+            # Retrying a rejected password only risks a lockout.
+            sys.exit("ERROR: Gmail rejected the login (wrong or revoked app password). Create a new one at "
+                     "https://myaccount.google.com/apppasswords and update GMAIL_APP_PASSWORD in "
+                     f"config/config.py. The report was still saved. ({exc.smtp_code})")
+        except (smtplib.SMTPException, OSError) as exc:
+            last_exc = exc
+            print(f"  Email attempt {attempt}/{attempts} failed at {stage}: {exc}", file=sys.stderr)
+            if attempt < attempts:
+                _sleep(delay)
+    reason = revoked_hint if stage == "login" and isinstance(last_exc, smtplib.SMTPServerDisconnected) \
+        else f"Check the Pi's internet connection and try again. Last error: {last_exc}"
+    sys.exit(f"ERROR: could not send the email after {attempts} attempts. {reason} The report was still saved.")
 
 
 # ── MAIN ──────────────────────────────────────────────────────────────────────

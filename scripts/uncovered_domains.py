@@ -10,7 +10,9 @@ For each (device, domain) the module computes a transparent score from:
   volume, share of the device's traffic, beaconing (regular intervals),
   novelty (not seen before this window), name hints (telemetry, metrics, ...),
   and vendor context (first-party vs third-party to the device's brand).
-It then suggests an action: candidate-block / investigate / keep.
+It then suggests an action: candidate-block / investigate / review / keep. "review" is a
+device's busiest allowed domains that no signal flagged: a look-at-it list, never a block
+candidate (bursty devices such as TVs have no regular beat for the other signals to catch).
 
 Nothing is ever blocked automatically. The module only writes:
   candidates.txt      domain-per-line, review then append to your custom blocklist
@@ -92,7 +94,7 @@ _VENDOR_STOP = {
     "communications", "communication", "wireless", "unknown", "innotek",
 }
 
-ACTIONS_SHOWN = ("candidate-block", "investigate")
+ACTIONS_SHOWN = ("candidate-block", "investigate", "review")
 
 
 # ── HELPERS ──────────────────────────────────────────────────────────────────
@@ -254,6 +256,8 @@ def build(rows, cfg, start_ts, blocked_statuses, allowed_statuses, reviewed=None
     min_q = int(cfg.get("UNCOVERED_MIN_QUERIES", 10))
     thr_block = int(cfg.get("UNCOVERED_BLOCK_SCORE", 55))
     thr_invest = int(cfg.get("UNCOVERED_INVESTIGATE_SCORE", 30))
+    review_min = int(cfg.get("UNCOVERED_REVIEW_MIN_QUERIES", 30))
+    review_n = int(cfg.get("UNCOVERED_REVIEW_TOP_N", 5))
     needed = DEFAULT_NEEDED + [d.lower().rstrip(".") for d in cfg.get("NEEDED_DOMAINS", [])]
     reviewed = reviewed or {}
     # Devices to leave out entirely (general-purpose machines whose app traffic looks like
@@ -394,17 +398,33 @@ def build(rows, cfg, start_ts, blocked_statuses, allowed_statuses, reviewed=None
 
     findings.sort(key=lambda f: (f["device"].lower(), -f["score"], -f["allowed"]))
 
-    by_dev = defaultdict(list)
+    # Volume review tier: a device's busiest allowed domains that no signal flagged. Bursty
+    # traffic (a TV, which follows when you use it) has no regular beat, so beaconing alone
+    # would miss its main phone-home hosts. These rows are for a human look only ("review"),
+    # never a block candidate; mark one "keep" with the review command and it stops appearing.
+    keeps = defaultdict(list)
     for f in findings:
-        if f["action"] in ACTIONS_SHOWN:
-            by_dev[f["device_key"]].append(f)
+        if f["action"] == "keep" and f["allowed"] >= review_min:
+            keeps[f["device_key"]].append(f)
+    for items in keeps.values():
+        items.sort(key=lambda f: (-f["allowed"], f["domain"]))
+        for f in items[:max(0, review_n)]:
+            f["action"] = "review"
+
+    by_dev = defaultdict(lambda: {"flag": [], "review": []})
+    for f in findings:
+        if f["action"] in ("candidate-block", "investigate"):
+            by_dev[f["device_key"]]["flag"].append(f)
+        elif f["action"] == "review":
+            by_dev[f["device_key"]]["review"].append(f)
     shown = []
-    for key, items in by_dev.items():
-        items.sort(key=lambda f: (-f["score"], -f["allowed"]))
+    for key, g in by_dev.items():
+        g["flag"].sort(key=lambda f: (-f["score"], -f["allowed"]))
+        g["review"].sort(key=lambda f: (-f["allowed"], f["domain"]))
         shown.append({
             "name": devices[key]["name"], "key": key, "ips": sorted(devices[key]["ips"]),
             "total": devices[key]["total"],
-            "findings": items[:top_n], "more": max(0, len(items) - top_n),
+            "findings": g["flag"][:top_n] + g["review"], "more": max(0, len(g["flag"]) - top_n),
         })
     shown.sort(key=lambda d: -d["total"])
 
@@ -456,7 +476,7 @@ def write_outputs(result, out_dir, tz):
 
 # ── RENDERING ────────────────────────────────────────────────────────────────
 
-_ACTION_COLOR = {"candidate-block": "#e63946", "investigate": "#e9a23b"}
+_ACTION_COLOR = {"candidate-block": "#e63946", "investigate": "#e9a23b", "review": "#6b7a99"}
 
 
 def _tags(f):
@@ -465,6 +485,8 @@ def _tags(f):
         tags.append(f"beacon~{fmt_interval(f['beacon_s'])}")
     if f["new"]:
         tags.append("new")
+    if f["action"] == "review":
+        tags.append("volume")
     if f["vendor_relation"]:
         tags.append(f["vendor_relation"])
     return tags
