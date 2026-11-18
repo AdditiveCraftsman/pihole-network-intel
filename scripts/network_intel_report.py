@@ -575,7 +575,10 @@ def main():
 
     stats = analyse(rows, hostnames, cfg, tz)
     stats["health"] = None
-    if cfg["BLOCKLIST_HEALTH_ENABLED"] and not args.demo:
+    if args.demo and cfg["BLOCKLIST_HEALTH_ENABLED"]:
+        # fake healthy result so demo screenshots show the line; never reads a real database
+        stats["health"] = {"total": 312_480, "lists": 6, "issues": [], "baseline": 312_480}
+    elif cfg["BLOCKLIST_HEALTH_ENABLED"]:
         try:  # best effort: a problem here must never stop the weekly email
             stats["health"] = blocklist_health.check(
                 gravity_path_for(cfg), health_state_path(cfg), float(cfg["BLOCKLIST_DROP_PCT"]))
